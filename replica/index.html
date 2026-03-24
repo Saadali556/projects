@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replica — Reproducible Research Platform</title>
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Styles -->
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- Toast Container -->
+<div id="tc"></div>
+
+<!-- ═══════════════════ FIREBASE SETUP MODAL ═══════════════════ -->
+<div class="mo open" id="m-fb">
+  <div class="md" style="max-width:600px;max-height:90vh;overflow-y:auto;">
+    <div class="f ac g12 mb20">
+      <div class="logo-icon" style="width:36px;height:36px;font-size:16px;">R</div>
+      <div>
+        <h3 style="margin:0;">Connect Your Firebase Backend</h3>
+        <div style="font-size:12.5px;color:var(--t2);margin-top:2px;">Enables real auth + Firestore database tracking</div>
+      </div>
+    </div>
+    <div class="sp mb20">
+      <div class="ss">
+        <div class="sn">1</div>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:3px;">Create a Firebase project</div>
+          <div style="font-size:12.5px;color:var(--t2);">Go to <a href="https://console.firebase.google.com" target="_blank" style="color:var(--blue);">console.firebase.google.com</a> → Add project → name it <code>replica-app</code></div>
+        </div>
+      </div>
+      <div class="ss">
+        <div class="sn">2</div>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:3px;">Enable Email/Password Auth</div>
+          <div style="font-size:12.5px;color:var(--t2);">Build → Authentication → Get started → Enable <strong>Email/Password</strong></div>
+        </div>
+      </div>
+      <div class="ss">
+        <div class="sn">3</div>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:3px;">Create Firestore Database</div>
+          <div style="font-size:12.5px;color:var(--t2);">Build → Firestore → Create database → Start in <strong>test mode</strong></div>
+        </div>
+      </div>
+      <div class="ss">
+        <div class="sn">4</div>
+        <div>
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:3px;">Get your config</div>
+          <div style="font-size:12.5px;color:var(--t2);">⚙️ Project Settings → Your apps → Web app → Register app → copy <code>firebaseConfig</code></div>
+        </div>
+      </div>
+      <div class="ss">
+        <div class="sn">5</div>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:13.5px;margin-bottom:3px;">Set Firestore Rules <span style="color:var(--orange);font-size:11px;">(important)</span></div>
+          <div style="font-size:12.5px;color:var(--t2);margin-bottom:8px;">Firestore → Rules → replace with:</div>
+          <div style="background:var(--bg);border:1px solid var(--br);border-radius:var(--r);padding:10px;font-family:var(--fm);font-size:11px;color:var(--t2);line-height:1.7;">
+            rules_version = '2';<br>service cloud.firestore {<br>
+            &nbsp;&nbsp;match /databases/{db}/documents {<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;match /users/{uid} {<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;allow read: if request.auth != null;<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;allow write: if request.auth.uid == uid;<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;match /capsules/{id} {<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;allow read: if true;<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;allow write: if request.auth != null;<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;match /runs/{id} { allow read,write: if request.auth != null; }<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;match /llm_logs/{id} { allow read,write: if request.auth != null; }<br>
+            &nbsp;&nbsp;}<br>}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mb16">
+      <label class="lbl">Paste your firebaseConfig JSON</label>
+      <textarea class="inp" id="fb-in" style="height:150px;font-family:var(--fm);font-size:12px;" placeholder='{
+  "apiKey": "AIza...",
+  "authDomain": "your-app.firebaseapp.com",
+  "projectId": "your-app",
+  "storageBucket": "your-app.appspot.com",
+  "messagingSenderId": "123456789",
+  "appId": "1:123456789:web:abc..."
+}'></textarea>
+    </div>
+    <div class="f g8">
+      <button class="btn bp f1" style="justify-content:center;" onclick="initFB()">🔥 Connect Firebase</button>
+      <button class="btn bg" onclick="useDemo()">▶ Demo mode</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--tm);text-align:center;margin-top:10px;">Demo mode = in-memory only. Nothing saved across reloads.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ LOGIN MODAL ═══════════════════ -->
+<div class="mo" id="m-login">
+  <div class="md">
+    <div class="f ac jb mb16"><h3>Sign in</h3><button class="btn bg bi bsm" onclick="cm('m-login')">✕</button></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div><label class="lbl">Email</label><input class="inp" id="li-email" placeholder="you@research.ai" type="email"></div>
+      <div><label class="lbl">Password</label><input class="inp" id="li-pass" placeholder="••••••••" type="password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div id="li-err" style="font-size:12.5px;color:var(--red);display:none;"></div>
+      <button class="btn bp wf" style="justify-content:center;" id="li-btn" onclick="doLogin()">Sign In</button>
+      <div style="text-align:center;font-size:13px;color:var(--tm)">No account? <a href="#" onclick="cm('m-login');om('m-signup')" style="color:var(--blue);text-decoration:none;">Sign up</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ SIGNUP MODAL ═══════════════════ -->
+<div class="mo" id="m-signup">
+  <div class="md">
+    <div class="f ac jb mb16"><h3>Create account</h3><button class="btn bg bi bsm" onclick="cm('m-signup')">✕</button></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div class="g2">
+        <div><label class="lbl">Display Name</label><input class="inp" id="su-name" placeholder="Ada Lovelace"></div>
+        <div><label class="lbl">Username</label><input class="inp" id="su-user" placeholder="ada-lovelace"></div>
+      </div>
+      <div><label class="lbl">Email</label><input class="inp" id="su-email" placeholder="ada@research.ai" type="email"></div>
+      <div><label class="lbl">Password</label><input class="inp" id="su-pass" placeholder="min 6 chars" type="password" onkeydown="if(event.key==='Enter')doSignup()"></div>
+      <div id="su-err" style="font-size:12.5px;color:var(--red);display:none;"></div>
+      <button class="btn bp wf" style="justify-content:center;" id="su-btn" onclick="doSignup()">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ NEW CAPSULE MODAL ═══════════════════ -->
+<div class="mo" id="m-cap">
+  <div class="md" style="max-width:520px;">
+    <div class="f ac jb mb16"><h3>New Capsule</h3><button class="btn bg bi bsm" onclick="cm('m-cap')">✕</button></div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div><label class="lbl">Name</label><input class="inp" id="nc-name" placeholder="my-ml-experiment"></div>
+      <div><label class="lbl">Description</label><textarea class="inp" id="nc-desc" placeholder="Describe your experiment..."></textarea></div>
+      <div class="g2">
+        <div><label class="lbl">Language</label>
+          <select class="inp" id="nc-lang"><option>Python</option><option>JavaScript</option><option>Java</option><option>C++</option></select>
+        </div>
+        <div><label class="lbl">Visibility</label>
+          <select class="inp" id="nc-vis"><option value="public">Public</option><option value="private">Private</option></select>
+        </div>
+      </div>
+      <div><label class="lbl">Tags (comma-separated)</label><input class="inp" id="nc-tags" placeholder="ml, nlp, classification"></div>
+      <button class="btn bp wf" style="justify-content:center;" onclick="createCapsule()">Create Capsule</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ NAV ═══════════════════ -->
+<nav id="nav" style="display:none;">
+  <div class="logo" onclick="sp('home')"><div class="logo-icon">R</div>Replica</div>
+  <div class="nc">
+    <button class="nb" onclick="sp('home')">Home</button>
+    <button class="nb" onclick="ra('explore')">Explore</button>
+    <button class="nb" onclick="ra('dashboard')">Dashboard</button>
+    <button class="nb" onclick="ra('editor')">Editor</button>
+    <button class="nb" onclick="ra('llm')">LLM Lab</button>
+    <button class="nb" id="admin-btn" style="display:none;color:var(--red);" onclick="ra('admin')">⚡ Admin</button>
+  </div>
+  <div class="nr" id="nav-auth">
+    <button class="btn bg" onclick="om('m-login')">Sign in</button>
+    <button class="btn bp" onclick="om('m-signup')">Get started</button>
+  </div>
+  <div class="nr" id="nav-user" style="display:none;">
+    <div class="f ac g8"><div class="sdot g"></div><span style="font-size:11.5px;color:var(--green);" id="fb-lbl">Live</span></div>
+    <span style="font-size:12px;color:var(--t2);font-family:var(--fm);" id="nav-uname"></span>
+    <div class="av" id="nav-av" onclick="ra('dashboard')"></div>
+    <button class="btn bg bsm" onclick="doLogout()">Sign out</button>
+  </div>
+</nav>
+
+<!-- ═══════════════════ HOME ═══════════════════ -->
+<div class="page" id="page-home">
+  <div class="hero">
+    <div class="ctn" style="position:relative;z-index:1;">
+      <div style="max-width:580px;">
+        <div style="font-family:var(--fm);font-size:11px;color:var(--blue);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:8px;">
+          <span style="width:20px;height:1px;background:var(--blue);display:inline-block;"></span>Firebase-Powered Backend
+        </div>
+        <h1 class="ht">Run. Share.<br><span class="aw">Reproduce.</span></h1>
+        <p style="font-size:17px;color:var(--t2);max-width:460px;line-height:1.7;margin-bottom:32px;">Real auth, cloud database, full experiment tracking — a GitHub-like platform for reproducible AI research.</p>
+        <div class="f g12 mb24" style="flex-wrap:wrap;">
+          <button class="btn bp" style="padding:10px 24px;font-size:15px;" onclick="om('m-signup')">🚀 Get started</button>
+          <button class="btn bg" style="padding:10px 24px;font-size:15px;" onclick="ra('explore')">🔍 Explore capsules</button>
+        </div>
+        <div class="f g20" style="flex-wrap:wrap;">
+          <div><div style="font-family:var(--fd);font-size:26px;font-weight:800;" id="h-users">—</div><div style="font-size:12px;color:var(--t2);">Researchers</div></div>
+          <div><div style="font-family:var(--fd);font-size:26px;font-weight:800;" id="h-caps">—</div><div style="font-size:12px;color:var(--t2);">Capsules</div></div>
+          <div><div style="font-family:var(--fd);font-size:26px;font-weight:800;" id="h-runs">—</div><div style="font-size:12px;color:var(--t2);">Runs logged</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:60px 0;">
+    <div class="ctn">
+      <h2 class="stit">Trending Capsules</h2>
+      <p class="ssub">Most active experiments on the platform</p>
+      <div class="g3" id="home-trending"></div>
+    </div>
+  </div>
+  <footer style="border-top:1px solid var(--br);padding:28px 0;background:var(--bg2);">
+    <div class="ctn f ac jb" style="flex-wrap:wrap;gap:12px;">
+      <div class="logo" style="font-size:16px;"><div class="logo-icon" style="width:22px;height:22px;font-size:10px;">R</div>Replica</div>
+      <div style="font-size:12px;color:var(--tm)">© 2025 Replica Research Cloud</div>
+    </div>
+  </footer>
+</div>
+
+<!-- ═══════════════════ EXPLORE ═══════════════════ -->
+<div class="page" id="page-explore">
+  <div class="ctn" style="padding:32px 24px 48px;">
+    <div class="f ac jb mb20">
+      <div><h1 class="stit">Explore Capsules</h1><p style="color:var(--t2);font-size:13.5px;">Discover &amp; reproduce research</p></div>
+      <button class="btn bp" onclick="om('m-cap')">+ New Capsule</button>
+    </div>
+    <div class="f g12 mb16" style="flex-wrap:wrap;">
+      <input class="inp" id="ex-q" placeholder="🔍  Search..." style="max-width:300px;" oninput="renderExplore()">
+      <select class="inp" id="ex-lang" style="width:auto;" onchange="renderExplore()">
+        <option value="">All Languages</option><option>Python</option><option>JavaScript</option><option>Java</option><option>C++</option>
+      </select>
+      <select class="inp" id="ex-sort" style="width:auto;" onchange="renderExplore()">
+        <option>Most Runs</option><option>Newest</option><option>Most Stars</option>
+      </select>
+    </div>
+    <div class="g3" id="ex-grid"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ DASHBOARD ═══════════════════ -->
+<div class="page" id="page-dashboard">
+  <div style="display:flex;flex:1;">
+    <div class="sb">
+      <div class="slbl">Navigation</div>
+      <div class="si active" id="sn-ov"     onclick="dTab('ov')">    <span>📊</span> Overview</div>
+      <div class="si"        id="sn-mycaps" onclick="dTab('mycaps')"><span>🧪</span> My Capsules</div>
+      <div class="si"        id="sn-runs"   onclick="dTab('runs')">  <span>▶️</span> Run History</div>
+      <div class="si"        id="sn-llml"   onclick="dTab('llml')">  <span>🤖</span> LLM Logs</div>
+      <div class="slbl">Account</div>
+      <div class="si"        id="sn-set"    onclick="dTab('set')">   <span>⚙️</span> Settings</div>
+    </div>
+    <div style="flex:1;overflow:auto;">
+
+      <!-- Overview -->
+      <div id="dc-ov" style="padding:28px;">
+        <div class="f ac jb mb20">
+          <div><h2 class="stit" id="d-hi">Dashboard</h2><p style="font-size:13px;color:var(--t2);" id="d-email"></p></div>
+          <button class="btn bp" onclick="om('m-cap')">+ New Capsule</button>
+        </div>
+        <div class="sg mb24">
+          <div class="sc"><div class="sv" style="color:var(--blue);"   id="ds-nc">0</div><div class="sl">My Capsules</div></div>
+          <div class="sc"><div class="sv" style="color:var(--green);"  id="ds-nr">0</div><div class="sl">Total Runs</div></div>
+          <div class="sc"><div class="sv" style="color:var(--purple);" id="ds-nl">0</div><div class="sl">LLM Sessions</div></div>
+          <div class="sc"><div class="sv" style="color:var(--orange);" id="ds-ns">0</div><div class="sl">Stars Received</div></div>
+        </div>
+        <h3 style="font-family:var(--fd);font-size:16px;font-weight:700;margin-bottom:14px;">Recent Capsules</h3>
+        <div class="g3" id="d-recent"></div>
+      </div>
+
+      <!-- My Capsules -->
+      <div id="dc-mycaps" style="display:none;padding:28px;">
+        <div class="f ac jb mb20"><h2 class="stit">My Capsules</h2><button class="btn bp" onclick="om('m-cap')">+ New</button></div>
+        <div class="g3" id="dc-capgrid"></div>
+        <div id="dc-empty" style="display:none;padding:40px;text-align:center;color:var(--tm);">No capsules yet. Create one!</div>
+      </div>
+
+      <!-- Run History -->
+      <div id="dc-runs" style="display:none;padding:28px;">
+        <h2 class="stit mb16">Run History <span style="font-size:12px;color:var(--tm);font-weight:400;font-family:var(--fm);">Firestore /runs</span></h2>
+        <div id="rl" class="f ac g8" style="color:var(--tm);font-size:13px;margin-bottom:12px;"><div class="sdot b"></div>Loading from Firestore...</div>
+        <div class="tw" id="rt" style="display:none;">
+          <table><thead><tr><th>Capsule</th><th>Language</th><th>Status</th><th>Duration</th><th>Output</th><th>Time</th></tr></thead>
+          <tbody id="r-body"></tbody></table>
+        </div>
+      </div>
+
+      <!-- LLM Logs -->
+      <div id="dc-llml" style="display:none;padding:28px;">
+        <h2 class="stit mb16">LLM Experiment Logs <span style="font-size:12px;color:var(--tm);font-weight:400;font-family:var(--fm);">Firestore /llm_logs</span></h2>
+        <div id="ll" class="f ac g8" style="color:var(--tm);font-size:13px;margin-bottom:12px;"><div class="sdot b"></div>Loading...</div>
+        <div id="ll-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+
+      <!-- Settings -->
+      <div id="dc-set" style="display:none;padding:28px;max-width:560px;">
+        <h2 class="stit mb20">Settings</h2>
+        <div class="card mb16">
+          <h4 style="font-family:var(--fd);margin-bottom:12px;">Profile</h4>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div><label class="lbl">Display Name</label><input class="inp" id="set-n"></div>
+            <div><label class="lbl">Email</label><input class="inp" id="set-e" readonly style="opacity:.5;"></div>
+            <div><label class="lbl">Username</label><input class="inp" id="set-u"></div>
+            <button class="btn bp bsm" style="width:fit-content;" onclick="saveProfile()">Save profile</button>
+          </div>
+        </div>
+        <div class="card mb16">
+          <h4 style="font-family:var(--fd);margin-bottom:12px;">API Keys <span style="font-size:11px;color:var(--tm);font-weight:400;">(stored encrypted in Firestore)</span></h4>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div><label class="lbl">OpenAI Key (used in LLM Lab)</label><input class="inp" type="password" id="set-oa" placeholder="sk-..."></div>
+            <div><label class="lbl">HuggingFace Token</label><input class="inp" type="password" id="set-hf" placeholder="hf_..."></div>
+            <button class="btn bp bsm" style="width:fit-content;" onclick="saveApiKeys()">Save keys</button>
+          </div>
+        </div>
+        <div class="card" style="border-color:rgba(248,81,73,.25);">
+          <h4 style="font-family:var(--fd);margin-bottom:10px;color:var(--red);">Danger Zone</h4>
+          <button class="btn bsm" style="background:var(--red);color:#fff;" onclick="delAccount()">Delete account</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ EDITOR ═══════════════════ -->
+<div class="page" id="page-editor">
+  <div style="display:flex;flex:1;height:calc(100vh - 56px);">
+
+    <!-- File Tree -->
+    <div style="width:200px;background:var(--bg2);border-right:1px solid var(--br);padding:8px 0;overflow-y:auto;flex-shrink:0;">
+      <div style="padding:6px 12px;font-size:11px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.8px;">Files</div>
+      <div id="ftree"></div>
+    </div>
+
+    <!-- Code Area -->
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="background:var(--bg3);border-bottom:1px solid var(--br);padding:6px 16px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-family:var(--fm);font-size:12.5px;color:var(--t2);" id="e-fname">main.py</span>
+        <div class="f g8 ac">
+          <select class="inp" style="width:auto;padding:4px 8px;font-size:12px;" id="e-lang" onchange="switchLang(this.value)">
+            <option value="python">Python</option><option value="javascript">JavaScript</option><option value="java">Java</option><option value="cpp">C++</option>
+          </select>
+          <button class="rb" id="run-btn" onclick="runCode()" style="padding:5px 14px;font-size:12.5px;">▶ Run</button>
+          <button class="btn bg bsm" onclick="saveCode()">💾 Save</button>
+        </div>
+      </div>
+      <div style="display:flex;flex:1;overflow:hidden;">
+        <div id="lnum" style="background:var(--bg3);padding:12px 10px;color:var(--tm);font-family:var(--fm);font-size:12.5px;line-height:1.8;text-align:right;min-width:40px;user-select:none;border-right:1px solid var(--br);">1</div>
+        <textarea id="editor" style="flex:1;background:var(--bg);padding:12px 16px;font-family:var(--fm);font-size:12.5px;line-height:1.8;color:var(--t1);border:none;outline:none;resize:none;tab-size:2;" spellcheck="false" oninput="upLines()" onkeydown="tabKey(event)"></textarea>
+      </div>
+      <div style="height:190px;background:#010409;border-top:1px solid var(--br);display:flex;flex-direction:column;flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 16px;border-bottom:1px solid var(--br);background:var(--bg3);">
+          <span style="font-size:12px;color:var(--t2);">Console <span style="font-size:10.5px;color:var(--tm);font-family:var(--fm);">→ logged to Firestore /runs</span></span>
+          <div class="f g8 ac">
+            <div class="f ac g8" id="run-stat"><div class="sdot g"></div><span style="font-size:11px;color:var(--t2);">Ready</span></div>
+            <button class="btn bg bi bsm" onclick="document.getElementById('cout').innerHTML=''">🗑</button>
+          </div>
+        </div>
+        <div id="cout" style="flex:1;overflow-y:auto;padding:10px 16px;font-family:var(--fm);font-size:12px;line-height:1.7;color:var(--green);">
+          <span style="color:var(--tm);">// Ready. Press Run — output saved to Firestore.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div style="width:240px;background:var(--bg2);border-left:1px solid var(--br);padding:14px;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Capsule</div>
+        <div id="e-capinfo" style="font-size:12.5px;color:var(--t2);">No capsule open.</div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Environment</div>
+        <div style="font-family:var(--fm);font-size:11.5px;color:var(--t2);line-height:1.8;">
+          <div>📦 numpy==1.24.0</div><div>📦 pandas==2.0.1</div><div>📦 scikit-learn==1.3.0</div><div>📦 torch==2.0.1</div><div>📦 transformers==4.35</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Recent Runs <span style="color:var(--blue);">(live)</span></div>
+        <div id="e-runs" style="font-size:11.5px;color:var(--t2);">No runs yet.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════ LLM PLAYGROUND ═══════════════════ -->
+<div class="page" id="page-llm">
+  <div class="ctnw" style="padding:28px 24px 48px;">
+    <div class="f ac jb mb20">
+      <div><h1 class="stit">LLM Playground</h1><p style="color:var(--t2);font-size:13.5px;">Sessions auto-logged to Firestore /llm_logs</p></div>
+      <div class="f g8">
+        <button class="btn bg bsm" onclick="saveLLM()">💾 Save session</button>
+        <button class="btn bp bsm" onclick="clearLLM()">+ New chat</button>
+      </div>
+    </div>
+    <div class="g2" style="gap:20px;align-items:start;">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between;">
+          <div class="f ac g8"><div class="sdot g"></div><span style="font-family:var(--fm);font-size:12.5px;" id="llm-ml">claude-3-sonnet</span></div>
+          <span style="font-size:11.5px;color:var(--tm);" id="llm-td">0 tokens</span>
+        </div>
+        <div class="lms" id="llm-msgs">
+          <div style="text-align:center;padding:32px;color:var(--tm);font-size:13px;">Start a conversation below</div>
+        </div>
+        <div style="padding:12px;border-top:1px solid var(--br);">
+          <div class="f g8 ac">
+            <textarea class="inp" id="llm-in" placeholder="Prompt... (Ctrl+Enter)" style="height:58px;resize:none;flex:1;" onkeydown="llmKey(event)"></textarea>
+            <button class="btn bp bi" onclick="sendLLM()">▶</button>
+          </div>
+          <div class="f g8 mt8" style="flex-wrap:wrap;" id="llm-qp"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="card">
+          <h4 style="font-family:var(--fd);font-size:14px;margin-bottom:12px;">Model Config</h4>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div><label class="lbl">Model</label>
+              <select class="inp" id="llm-ms" onchange="document.getElementById('llm-ml').textContent=this.value">
+                <option>claude-3-sonnet</option><option>gpt-4-turbo</option><option>gpt-3.5-turbo</option><option>llama-2-70b</option><option>mistral-7b</option>
+              </select>
+            </div>
+            <div><label class="lbl">System Prompt</label><textarea class="inp" id="llm-sys" placeholder="You are a helpful research assistant..." style="height:60px;font-size:12px;"></textarea></div>
+            <div><label class="lbl">Temperature: <span id="tv">0.7</span></label><input type="range" min="0" max="1" step="0.1" value="0.7" style="width:100%;" oninput="document.getElementById('tv').textContent=this.value"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4 style="font-family:var(--fd);font-size:14px;margin-bottom:12px;">Session Stats</h4>
+          <div class="g2" style="gap:8px;">
+            <div class="met"><div class="mv" id="llm-tt">0</div><div class="mk">Tokens used</div></div>
+            <div class="met"><div class="mv" id="llm-mc">0</div><div class="mk">Messages</div></div>
+            <div class="met"><div class="mv" style="color:var(--purple);" id="llm-co">$0.00</div><div class="mk">Est. cost</div></div>
+            <div class="met"><div class="mv" style="color:var(--green);" id="llm-sc">0</div><div class="mk">Saved sessions</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h4 style="font-family:var(--fd);font-size:14px;margin-bottom:10px;">Saved Sessions <span style="font-size:11px;color:var(--tm);font-weight:400;">(from Firestore)</span></h4>
+          <div id="llm-sl" style="display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ ADMIN ═══════════════════ -->
+<div class="page" id="page-admin">
+  <div class="ab">
+    <div class="logo-icon" style="width:22px;height:22px;font-size:10px;">R</div>
+    <div class="admb">ADMIN</div>
+    <span style="font-size:13.5px;font-weight:600;">Backend Dashboard</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--t2);" id="adm-ref">—</span>
+    <button class="btn bg bsm" onclick="loadAdmin()">🔄 Refresh</button>
+  </div>
+  <div class="ctnw" style="padding:24px 24px 48px;">
+    <div class="sg mb24">
+      <div class="sc"><div class="sv" style="color:var(--blue);"   id="a-u">—</div><div class="sl">Users</div>   <div style="font-size:10.5px;color:var(--tm);margin-top:4px;font-family:var(--fm);">/users</div></div>
+      <div class="sc"><div class="sv" style="color:var(--green);"  id="a-c">—</div><div class="sl">Capsules</div><div style="font-size:10.5px;color:var(--tm);margin-top:4px;font-family:var(--fm);">/capsules</div></div>
+      <div class="sc"><div class="sv" style="color:var(--purple);" id="a-r">—</div><div class="sl">Runs</div>    <div style="font-size:10.5px;color:var(--tm);margin-top:4px;font-family:var(--fm);">/runs</div></div>
+      <div class="sc"><div class="sv" style="color:var(--orange);" id="a-l">—</div><div class="sl">LLM Logs</div><div style="font-size:10.5px;color:var(--tm);margin-top:4px;font-family:var(--fm);">/llm_logs</div></div>
+    </div>
+    <div class="tabs mb0" id="adm-tabs">
+      <button class="tb active" onclick="aTab('au',this)">👥 Users</button>
+      <button class="tb"        onclick="aTab('ac',this)">🧪 Capsules</button>
+      <button class="tb"        onclick="aTab('ar',this)">▶️ Runs</button>
+      <button class="tb"        onclick="aTab('al',this)">🤖 LLM Logs</button>
+      <button class="tb"        onclick="aTab('as',this)">🗄️ Schema</button>
+    </div>
+    <div id="at-au" class="tc active">
+      <div class="tw"><table><thead><tr><th>UID</th><th>Name</th><th>Email</th><th>Username</th><th>Joined</th><th>Capsules</th></tr></thead><tbody id="a-utb"></tbody></table></div>
+    </div>
+    <div id="at-ac" class="tc">
+      <div class="tw"><table><thead><tr><th>ID</th><th>Name</th><th>Owner</th><th>Language</th><th>Visibility</th><th>Runs</th><th>Stars</th><th>Created</th></tr></thead><tbody id="a-ctb"></tbody></table></div>
+    </div>
+    <div id="at-ar" class="tc">
+      <div class="tw"><table><thead><tr><th>ID</th><th>Capsule</th><th>User</th><th>Lang</th><th>Status</th><th>Duration</th><th>Output</th><th>Time</th></tr></thead><tbody id="a-rtb"></tbody></table></div>
+    </div>
+    <div id="at-al" class="tc">
+      <div class="tw"><table><thead><tr><th>ID</th><th>User</th><th>Model</th><th>Msgs</th><th>Tokens</th><th>Cost</th><th>Saved</th></tr></thead><tbody id="a-ltb"></tbody></table></div>
+    </div>
+    <div id="at-as" class="tc">
+      <div class="g2" style="gap:20px;">
+        <div class="card"><div style="font-family:var(--fm);font-size:11.5px;color:var(--blue);margin-bottom:10px;font-weight:600;">📁 /users/{uid}</div>
+          <div class="term" style="min-height:auto;font-size:11.5px;color:var(--t2);line-height:1.8;">uid, displayName, username, email<br>createdAt: Timestamp<br>capsuleCount: number<br>apiKeys: { openai, huggingface }</div>
+        </div>
+        <div class="card"><div style="font-family:var(--fm);font-size:11.5px;color:var(--blue);margin-bottom:10px;font-weight:600;">📁 /capsules/{id}</div>
+          <div class="term" style="min-height:auto;font-size:11.5px;color:var(--t2);line-height:1.8;">name, description, language, tags[]<br>ownerUid, ownerUsername<br>visibility: "public"|"private"<br>stars, forks, runs: number<br>parentId, certified<br>createdAt: Timestamp</div>
+        </div>
+        <div class="card"><div style="font-family:var(--fm);font-size:11.5px;color:var(--blue);margin-bottom:10px;font-weight:600;">📁 /runs/{id}</div>
+          <div class="term" style="min-height:auto;font-size:11.5px;color:var(--t2);line-height:1.8;">capsuleId, capsuleName<br>userUid, language<br>status: "success"|"error"<br>durationMs, outputPreview<br>exitCode: 0|1<br>createdAt: Timestamp</div>
+        </div>
+        <div class="card"><div style="font-family:var(--fm);font-size:11.5px;color:var(--blue);margin-bottom:10px;font-weight:600;">📁 /llm_logs/{id}</div>
+          <div class="term" style="min-height:auto;font-size:11.5px;color:var(--t2);line-height:1.8;">userUid, model<br>systemPrompt: string<br>messages: [{role,content}]<br>totalTokens, estimatedCost<br>temperature: number<br>savedAt: Timestamp</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- App Script -->
+<script src="js/app.js"></script>
+</body>
+</html>
